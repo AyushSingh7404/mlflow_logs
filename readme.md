@@ -1,17 +1,21 @@
 # MLflow Logs API
 
-A FastAPI-based REST API to fetch MLflow experiment data with complete metric history for visualization and analysis.
+A lightweight FastAPI service to fetch MLflow experiment data including complete metric history for easy visualization and analysis.
 
-## Features
+---
 
-- 🔐 **Basic Authentication** - Username/password authentication for self-hosted MLflow
-- 📊 **Complete Metric History** - Fetch step-by-step metric data for plotting
-- 🔍 **Flexible Queries** - Search by experiment name, ID, or run ID
-- 📈 **Statistical Summaries** - Get min/max/last values for each metric
-- 🔒 **SSL Bypass** - Support for self-signed certificates
-- 📝 **Auto-generated Docs** - Interactive API documentation at `/docs`
+## ✅ Key Features
 
-## Installation
+- 🔐 **Basic Authentication** (supports username/password for self-hosted MLflow)
+- 📊 **Complete Metric History** (step-by-step points for plotting)
+- 🔍 **Flexible querying** by experiment name, experiment ID, or specific run ID
+- 📈 **Metric summaries** (min / max / last)
+- 🔒 **Optional SSL/TLS bypass** for self-signed certs (use with caution)
+- 📝 **Interactive docs** at `/docs`
+
+---
+
+## ⚡ Quick Start
 
 ### Requirements
 
@@ -19,101 +23,76 @@ A FastAPI-based REST API to fetch MLflow experiment data with complete metric hi
 pip install fastapi uvicorn mlflow pydantic
 ```
 
-### Quick Start
+### Run locally
 
-1. Run the API:
 ```bash
-python mlflow_logs_api.py
+python mlflow_logs.py
+# or with uvicorn for auto-reload
+uvicorn mlflow_logs:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The API will be available at `http://localhost:8001`
+The API will be available at: `http://0.0.0.0:8000` and docs at `http://0.0.0.0:8000/docs`
 
-## API Endpoints
-
-### 1. Health Check
-**POST** `/health`
-
-Check if your MLflow server is accessible.
-
-**Request:**
-```json
-{
-  "tracking_uri": "https://mlflow.example.com/mlflow-api",
-  "username": "your_username",
-  "password": "your_password",
-  "insecure_tls": true
-}
-```
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "mlflow_accessible": true,
-  "experiments_found": 5,
-  "authentication": "basic_auth",
-  "ssl_verification": false
-}
-```
+> Note: This service can read defaults from environment variables. If `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_USERNAME`, and `MLFLOW_TRACKING_PASSWORD` are set in the environment, you may omit `tracking_uri`, `username`, and `password` in the request body (you can send an empty JSON `{}` to use environment defaults). If these are not set, provide them in the request.
 
 ---
 
-### 2. List Experiments
-**POST** `/mlflow/experiments`
+## Endpoints Overview
 
-Get all available experiments from your MLflow server.
+- POST `/health` — Check MLflow accessibility
+- POST `/mlflow/experiments` — List experiments
+- POST `/mlflow/runs` — Fetch runs and full metric history
 
-**Request:**
-```json
-{
-  "tracking_uri": "https://mlflow.example.com/mlflow-api",
-  "username": "your_username",
-  "password": "your_password",
-  "insecure_tls": true
-}
+---
+
+## Example Requests & Optional Responses 🔍
+
+### 1. List experiments (using environment defaults)
+
+Request (empty body is valid when env vars set):
+
+```bash
+curl -X POST http://0.0.0.0:8000/mlflow/experiments \
+  -H "Content-Type: application/json" \
+  -d '{}'
 ```
 
-**Response:**
+Possible Response (success):
+
 ```json
 {
   "success": true,
   "total_experiments": 3,
   "experiments": [
-    {
-      "experiment_id": "1",
-      "name": "my-experiment",
-      "artifact_location": "s3://bucket/path",
-      "lifecycle_stage": "active"
-    }
+    {"experiment_id": "1", "name": "391-818", "artifact_location": "s3://bucket/path", "lifecycle_stage": "active"}
   ]
 }
 ```
 
+If the server cannot reach MLflow or auth fails, you'll get an HTTP 500 or a descriptive error.
+
 ---
 
-### 3. Fetch Runs
-**POST** `/mlflow/runs`
+### 2. Fetch runs for an experiment (with an explicit experiment name)
 
-Fetch runs from an experiment with complete metric history.
+Request:
 
-**Request:**
-```json
-{
-  "tracking_uri": "https://mlflow.example.com/mlflow-api",
-  "username": "your_username",
-  "password": "your_password",
-  "insecure_tls": true,
-  "experiment_name": "my-experiment",
-  "limit": 10,
-  "include_metric_history": true
-}
+```bash
+curl -X POST http://0.0.0.0:8000/mlflow/runs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "experiment_name": "391-818",
+    "limit": 5
+  }'
 ```
 
-**Response:**
+Possible Response (success):
+
 ```json
 {
   "success": true,
-  "experiment_name": "my-experiment",
+  "experiment_name": "391-818",
+  "experiment_id": "2",
   "total_runs": 2,
   "runs": [
     {
@@ -121,267 +100,71 @@ Fetch runs from an experiment with complete metric history.
       "run_name": "training_run_1",
       "status": "FINISHED",
       "duration_seconds": 3600.0,
-      "parameters": {
-        "learning_rate": "0.001",
-        "batch_size": "16"
-      },
-      "metrics_summary": {
-        "train_loss": 0.234,
-        "val_accuracy": 0.892
-      },
+      "parameters": {"lr": "0.001"},
+      "metrics_summary": {"val_accuracy": 0.89},
       "metrics_history": [
-        {
-          "metric_name": "train_loss",
-          "history": [
-            {"step": 0, "value": 0.5, "timestamp": 1704067200000},
-            {"step": 1, "value": 0.4, "timestamp": 1704068400000},
-            {"step": 2, "value": 0.234, "timestamp": 1704069600000}
-          ],
-          "total_points": 3,
-          "min_value": 0.234,
-          "max_value": 0.5,
-          "last_value": 0.234
-        }
+        {"metric_name":"val_accuracy","history":[{"step":0,"value":0.8,"timestamp":1700000000000}],"total_points":1,"min_value":0.8,"max_value":0.8,"last_value":0.8}
       ]
     }
   ],
-  "message": "Fetched 2 run(s) with 4 total metric histories"
+  "message": "Fetched 2 run(s) with 3 total metric histories"
 }
 ```
 
-## Configuration Parameters
+If the experiment is not found, you'll receive a 404 response with an explanatory message.
 
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `tracking_uri` | ✅ Yes | - | MLflow server URL |
-| `username` | ✅ Yes | - | MLflow username |
-| `password` | ✅ Yes | - | MLflow password |
-| `insecure_tls` | No | `true` | Disable SSL verification for self-signed certs |
-| `http_timeout` | No | `15` | HTTP request timeout in seconds |
-| `experiment_name` | No | - | Filter by experiment name |
-| `experiment_id` | No | - | Filter by experiment ID |
-| `run_id` | No | - | Fetch specific run by ID |
-| `limit` | No | `10` | Maximum number of runs to fetch |
-| `include_metric_history` | No | `true` | Include complete step-by-step metrics |
+---
 
-## Usage Examples
+## Request Fields (high level)
 
-### Python Example
+- `tracking_uri` (string) — MLflow tracking server URL (optional if `MLFLOW_TRACKING_URI` env var is set)
+- `username` (string) — MLflow username (optional if `MLFLOW_TRACKING_USERNAME` env var is set)
+- `password` (string) — MLflow password (optional if `MLFLOW_TRACKING_PASSWORD` env var is set)
+- `insecure_tls` (bool, default true) — Disable SSL verification for self-signed certs
+- `http_timeout` (int, default 15) — HTTP request timeout in seconds
+- `experiment_name` / `experiment_id` — experiment selector
+- `run_id` — fetch a single run
+- `limit` (int, default 10) — max runs to return
+- `include_metric_history` (bool, default true) — include full metric histories
 
-```python
-import requests
+> Tip: For quick local testing set the three env vars and call the endpoints with `{}` bodies.
 
-# Configuration
-config = {
-    "tracking_uri": "https://mlflow.example.com/mlflow-api",
-    "username": "mlflow",
-    "password": "your_password",
-    "insecure_tls": True,
-    "experiment_name": "my-experiment",
-    "limit": 5,
-    "include_metric_history": True
-}
+---
 
-# Fetch runs
-response = requests.post(
-    "http://localhost:8001/mlflow/runs",
-    json=config
-)
+## Interactive Docs
 
-data = response.json()
+Open `http://0.0.0.0:8000/docs` for Swagger UI to try endpoints and view request/response schemas.
 
-# Access metric history
-for run in data['runs']:
-    print(f"Run: {run['run_name']}")
-    for metric in run['metrics_history']:
-        print(f"  {metric['metric_name']}: {metric['total_points']} points")
-        steps = [p['step'] for p in metric['history']]
-        values = [p['value'] for p in metric['history']]
-        # Now you can plot steps vs values
-```
+---
 
-### cURL Example
+## Docker (optional)
 
-```bash
-curl -X POST "http://localhost:8001/mlflow/runs" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tracking_uri": "https://mlflow.example.com/mlflow-api",
-    "username": "mlflow",
-    "password": "your_password",
-    "insecure_tls": true,
-    "experiment_name": "my-experiment"
-  }'
-```
+Dockerfile should copy `mlflow_logs.py` and expose port `8000`.
 
-### JavaScript/Fetch Example
-
-```javascript
-const config = {
-  tracking_uri: "https://mlflow.example.com/mlflow-api",
-  username: "mlflow",
-  password: "your_password",
-  insecure_tls: true,
-  experiment_name: "my-experiment",
-  limit: 10
-};
-
-fetch("http://localhost:8001/mlflow/runs", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(config)
-})
-  .then(res => res.json())
-  .then(data => {
-    console.log(`Found ${data.total_runs} runs`);
-    data.runs.forEach(run => {
-      console.log(`Run: ${run.run_name}`);
-    });
-  });
-```
-
-## Interactive Documentation
-
-Once the API is running, visit:
-
-```
-http://localhost:8001/docs
-```
-
-This provides an interactive Swagger UI where you can:
-- Test all endpoints
-- See request/response schemas
-- Try queries directly in the browser
-
-## Response Structure
-
-### Run Data Object
-
-Each run contains:
-
-- **`run_id`** - Unique run identifier
-- **`run_name`** - Human-readable run name
-- **`status`** - Run status (FINISHED, RUNNING, FAILED, etc.)
-- **`duration_seconds`** - Total run duration
-- **`parameters`** - All hyperparameters logged during training
-- **`metrics_summary`** - Latest value for each metric
-- **`metrics_history`** - Complete step-by-step history for each metric
-
-### Metric History Object
-
-Each metric history contains:
-
-- **`metric_name`** - Name of the metric
-- **`history`** - Array of {step, value, timestamp} objects
-- **`total_points`** - Number of data points
-- **`min_value`** - Minimum value across all steps
-- **`max_value`** - Maximum value across all steps
-- **`last_value`** - Most recent value
-
-## Use Cases
-
-### 1. Training Dashboard
-Fetch metrics in real-time to display training progress on a dashboard.
-
-### 2. Model Comparison
-Compare hyperparameters and metrics across multiple training runs.
-
-### 3. Automated Reporting
-Generate reports with training metrics and visualizations.
-
-### 4. Data Analysis
-Export metric data to CSV/Excel for offline analysis.
-
-### 5. Integration
-Integrate MLflow data into your existing tools and workflows.
-
-## Security Notes
-
-### SSL/TLS
-
-The `insecure_tls` parameter disables SSL certificate verification. This is useful for:
-- Self-signed certificates
-- Internal development environments
-- Testing
-
-**For production:**
-- Use proper SSL certificates
-- Set `insecure_tls: false`
-- Ensure certificates are in your system's trust store
-
-### Authentication
-
-All requests require username and password. Store credentials securely:
-
-```python
-# ❌ Don't hardcode credentials
-config = {"username": "mlflow", "password": "mypassword"}
-
-# ✅ Use environment variables
-import os
-config = {
-    "username": os.getenv("MLFLOW_USERNAME"),
-    "password": os.getenv("MLFLOW_PASSWORD")
-}
-```
-
-## Troubleshooting
-
-### Connection Issues
-
-**Error:** "SSL: CERTIFICATE_VERIFY_FAILED"
-```json
-{
-  "insecure_tls": true
-}
-```
-
-**Error:** "Connection timeout"
-```json
-{
-  "http_timeout": 30
-}
-```
-
-### Authentication Issues
-
-**Error:** "Authentication failed"
-- Verify username and password
-- Check MLflow server authentication settings
-
-### Experiment Not Found
-
-**Error:** "Experiment not found"
-- List all experiments first: `POST /mlflow/experiments`
-- Use exact experiment name from the list
-
-## Development
-
-### Run in Development Mode
-
-```bash
-uvicorn mlflow_logs_api:app --reload --host 0.0.0.0 --port 8001
-```
-
-### Docker Deployment
+Example Dockerfile snippet:
 
 ```dockerfile
-FROM python:3.9-slim
-
+FROM python:3.10-slim
 WORKDIR /app
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-COPY mlflow_logs_api.py .
-
-EXPOSE 8001
-
-CMD ["python", "mlflow_logs_api.py"]
+COPY mlflow_logs.py .
+EXPOSE 8000
+CMD ["python", "mlflow_logs.py"]
 ```
 
 Build and run:
+
 ```bash
 docker build -t mlflow-api .
-docker run -p 8001:8001 mlflow-api
+docker run -p 8000:8000 mlflow-api
 ```
+
+---
+
+## Troubleshooting & Notes
+
+- If you rely on environment defaults but still get validation errors, check that `MLFLOW_TRACKING_URI`, `MLFLOW_TRACKING_USERNAME`, and `MLFLOW_TRACKING_PASSWORD` are set in the process environment that starts the API.
+- `insecure_tls: true` is convenient for self-signed certs, but **do not** use it in production environments.
+
+---

@@ -113,34 +113,34 @@ def get_mlflow_client(
     http_timeout: int = 15
 ) -> MlflowClient:
     """Initialize MLflow client with basic authentication."""
-    
+
     # Set basic authentication
     os.environ["MLFLOW_TRACKING_USERNAME"] = username
     os.environ["MLFLOW_TRACKING_PASSWORD"] = password
-    
+
     # SSL/TLS settings
     if insecure_tls:
         os.environ["MLFLOW_TRACKING_INSECURE_TLS"] = "true"
     else:
         os.environ.pop("MLFLOW_TRACKING_INSECURE_TLS", None)
-    
+
     # HTTP timeout
     os.environ["MLFLOW_HTTP_REQUEST_TIMEOUT"] = str(http_timeout)
-    
+
     return MlflowClient(tracking_uri=tracking_uri)
 
 def get_metric_history(client: MlflowClient, run_id: str, metric_key: str) -> MetricHistory:
     """Fetch complete history of a single metric."""
     try:
         history = client.get_metric_history(run_id, metric_key)
-        
+
         if not history:
             return MetricHistory(
                 metric_name=metric_key,
                 history=[],
                 total_points=0
             )
-        
+
         # Convert to list of MetricPoints
         metric_points = [
             MetricPoint(
@@ -150,13 +150,13 @@ def get_metric_history(client: MlflowClient, run_id: str, metric_key: str) -> Me
             )
             for m in history
         ]
-        
+
         # Sort by step
         metric_points.sort(key=lambda x: x.step)
-        
+
         # Calculate statistics
         values = [p.value for p in metric_points]
-        
+
         return MetricHistory(
             metric_name=metric_key,
             history=metric_points,
@@ -176,19 +176,19 @@ def get_metric_history(client: MlflowClient, run_id: str, metric_key: str) -> Me
 def process_single_run(client: MlflowClient, run_id: str, include_history: bool = True) -> RunData:
     """Fetch and process a single MLflow run with complete metric history."""
     run = client.get_run(run_id)
-    
+
     # Calculate duration
     duration = None
     if run.info.end_time and run.info.start_time:
         duration = (run.info.end_time - run.info.start_time) / 1000.0
-    
+
     # Get metric history for all metrics
     metrics_history = []
     if include_history and run.data.metrics:
         for metric_key in run.data.metrics.keys():
             history = get_metric_history(client, run_id, metric_key)
             metrics_history.append(history)
-    
+
     return RunData(
         run_id=run.info.run_id,
         run_name=run.data.tags.get("mlflow.runName", run.info.run_id[:8]),
@@ -230,7 +230,7 @@ async def root():
 async def fetch_mlflow_runs(request: MLflowRequest):
     """
     Fetch MLflow runs with complete metric history.
-    
+
     Example Request:
     {
         "tracking_uri": "https://temp-sandbox.n0.new/q0/mlflow-api",
@@ -251,14 +251,14 @@ async def fetch_mlflow_runs(request: MLflowRequest):
             insecure_tls=request.insecure_tls,
             http_timeout=request.http_timeout
         )
-        
+
         # Case 1: Fetch single run by ID
         if request.run_id:
             try:
                 run_data = process_single_run(client, request.run_id, request.include_metric_history)
                 run = client.get_run(request.run_id)
                 experiment = client.get_experiment(run.info.experiment_id)
-                
+
                 return MLflowResponse(
                     success=True,
                     experiment_name=experiment.name,
@@ -272,7 +272,7 @@ async def fetch_mlflow_runs(request: MLflowRequest):
                     status_code=404,
                     detail=f"Run '{request.run_id}' not found: {str(e)}"
                 )
-        
+
         # Case 2: Fetch runs from an experiment
         if request.experiment_name:
             experiment = client.get_experiment_by_name(request.experiment_name)
@@ -303,13 +303,13 @@ async def fetch_mlflow_runs(request: MLflowRequest):
             experiment = experiments[0]
             experiment_id = experiment.experiment_id
             experiment_name = experiment.name
-        
+
         # Search runs
         runs = client.search_runs(
             experiment_ids=[experiment_id],
             max_results=request.limit or 10
         )
-        
+
         if not runs:
             return MLflowResponse(
                 success=True,
@@ -319,15 +319,15 @@ async def fetch_mlflow_runs(request: MLflowRequest):
                 runs=[],
                 message=f"No runs found in experiment '{experiment_name}'"
             )
-        
+
         # Process all runs
         runs_data = [
             process_single_run(client, run.info.run_id, request.include_metric_history) 
             for run in runs
         ]
-        
+
         total_metrics = sum(len(r.metrics_history) for r in runs_data)
-        
+
         return MLflowResponse(
             success=True,
             experiment_name=experiment_name,
@@ -336,7 +336,7 @@ async def fetch_mlflow_runs(request: MLflowRequest):
             runs=runs_data,
             message=f"Fetched {len(runs_data)} run(s) with {total_metrics} total metric histories"
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -349,7 +349,7 @@ async def fetch_mlflow_runs(request: MLflowRequest):
 async def list_experiments(request: MLflowRequest):
     """
     List all available experiments.
-    
+
     Example Request:
     {
         "tracking_uri": "https://temp-sandbox.n0.new/q0/mlflow-api",
@@ -366,9 +366,9 @@ async def list_experiments(request: MLflowRequest):
             insecure_tls=request.insecure_tls,
             http_timeout=request.http_timeout
         )
-        
+
         experiments = client.search_experiments()
-        
+
         exp_list = [
             {
                 "experiment_id": exp.experiment_id,
@@ -378,7 +378,7 @@ async def list_experiments(request: MLflowRequest):
             }
             for exp in experiments
         ]
-        
+
         return {
             "success": True,
             "total_experiments": len(exp_list),
@@ -394,7 +394,7 @@ async def list_experiments(request: MLflowRequest):
 async def health_check(request: MLflowRequest):
     """
     Health check endpoint.
-    
+
     Example Request:
     {
         "tracking_uri": "https://temp-sandbox.n0.new/q0/mlflow-api",
@@ -411,7 +411,7 @@ async def health_check(request: MLflowRequest):
             insecure_tls=request.insecure_tls,
             http_timeout=request.http_timeout
         )
-        
+
         experiments = client.search_experiments(max_results=1)
         mlflow_accessible = True
         experiment_count = len(experiments)
@@ -420,7 +420,7 @@ async def health_check(request: MLflowRequest):
         mlflow_accessible = False
         experiment_count = 0
         error_message = str(e)
-    
+
     return {
         "status": "healthy" if mlflow_accessible else "unhealthy",
         "mlflow_accessible": mlflow_accessible,
